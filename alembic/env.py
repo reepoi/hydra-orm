@@ -18,8 +18,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-import config
-target_metadata = config.mapper_registry.metadata
+import cs
+target_metadata = cs.mapper_registry.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -66,7 +66,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata,
+            render_as_batch=True,
         )
 
         with context.begin_transaction():
