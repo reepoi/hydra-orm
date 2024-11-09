@@ -75,10 +75,12 @@ class Model(CfgWithTable):
     ))
     name: str = field(default='CNN', metadata=dict(sa=sa.Column(sa.String(3))))
     name2: str = field(default='RNN', metadata=dict(sa=sa.Column(sa.String(3))))
-    quality: Quality = field(default=Quality.GOOD, metadata=dict(
-        sa=sa.Column(sa.ForeignKey(f'{Quality.__name__}.id'), nullable=False))
-    )
-    fields: typing.List[Field] = field(default_factory=list, metadata=dict(sa=sa.orm.relationship(Field.__name__, secondary=lambda: table_m2m_model_field)))
+    quality_id: int = field(init=False, metadata=dict(
+        sa=sa.Column(sa.ForeignKey(f'{Quality.__name__}.id'), nullable=False),
+        omegaconf_ignore=True,
+    ))
+    quality: Quality = field(default=Quality.GOOD)
+    fields: typing.List[Field] = field(default_factory=list, metadata=dict(sa=orm.relationship(Field.__name__, secondary=lambda: table_m2m_model_field)))
     _target_: str = f'{MODULE_NAME}.{__qualname__}'
 
     # def __post_init__(self):
@@ -93,24 +95,6 @@ table_m2m_model_field = sa.Table(
 )
 
 
-# @sa.event.listens_for(Model, 'do_orm_execute')
-# @sa.event.listens_for(Model, 'before_insert')
-def _map_enums(mapper, connection, target):
-    breakpoint()
-    for f in dataclasses.fields(target):
-        if isinstance(f.type, enum.EnumMeta):
-            table = f.type.table
-            stmt = sa.select(table).where(getattr(table.c, f.type.__name__) == getattr(target, f.name))
-            rows = connection.execute(stmt)
-            _, rows = zip(*list(zip(range(2), rows)))
-            assert len(rows) == 1
-            setattr(target, f.name, rows[0].id)
-
-
-# sa.event.listen(Model, 'before_insert', _map_enums)
-# sa.event.listen(Field, 'before_insert', _map_enums)
-
-
 class Config(CfgWithTable):
     __tablename__ = __qualname__
     __table_args__ = tuple()
@@ -119,15 +103,15 @@ class Config(CfgWithTable):
         sa=sa.Column(sa.Integer, primary_key=True),
         omegaconf_ignore=True,
     ))
-    # model_id: int = field(init=False, metadata=dict(
-    #     # https://docs.sqlalchemy.org/en/20/core/metadata.html#sqlalchemy.schema.Column
-    #     sa=sa.Column('model', sa.ForeignKey(f'{Model.__name__}.id'), unique=True, nullable=False),
-    #     omegaconf_ignore=True,
-    # ))
-    # model: Model = field(default_factory=Model, metadata=dict(sa=orm.relationship('Model')))
-    model: Model = field(default_factory=Model, metadata=dict(
+    model_id: int = field(init=False, metadata=dict(
+        # https://docs.sqlalchemy.org/en/20/core/metadata.html#sqlalchemy.schema.Column
         sa=sa.Column('model', sa.ForeignKey(f'{Model.__name__}.id'), nullable=False),
+        omegaconf_ignore=True,
     ))
+    model: Model = field(default_factory=Model, metadata=dict(sa=orm.relationship(Model.__name__)))
+    # model: Model = field(default_factory=Model, metadata=dict(
+    #     sa=sa.Column('model', sa.ForeignKey(f'{Model.__name__}.id'), nullable=False),
+    # ))
     _target_: str = f'{MODULE_NAME}.{__qualname__}'
     # use __main__ if instantiation depends on globals used in __post_init__
 
@@ -147,10 +131,10 @@ def instantiate_and_insert_config(session, cfg):
             rows = session.execute(stmt)
             _, rows = zip(*list(zip(range(2), rows)))
             assert len(rows) == 1
-            record[k] = rows[0].id
+            record[f'{k}_id'] = rows[0].id
         elif isinstance(v, (dict, omegaconf.DictConfig)):
             row = instantiate_and_insert_config(session, v)
-            record[k] = row.id
+            record[f'{k}_id'] = row.id
         elif isinstance(v, (list, omegaconf.ListConfig)):
             rows = [
                 instantiate_and_insert_config(session, vv) for vv in v
