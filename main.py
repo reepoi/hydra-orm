@@ -8,10 +8,10 @@ import cs
 def main(cfg):
     print(OmegaConf.to_yaml(cfg, sort_keys=True))
     with cs.orm.Session(cs.engine) as session:
-        cfg = hydra.utils.instantiate(cfg)
-        breakpoint()
-        session.add(cfg)
+        sc = cs.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
         session.commit()
+        breakpoint()
+        print('end')
 
 
 if __name__ == "__main__":
