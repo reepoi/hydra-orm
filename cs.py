@@ -31,19 +31,19 @@ class Quality(str, enum.Enum):
     BAD = 'bad'
 
 
-Quality.table = sa.Table(
-    Quality.__name__,
-    mapper_registry.metadata,
-    sa.Column('id', sa.Integer, primary_key=True),
-    sa.Column(Quality.__name__, sa.String(max(len(e.value) for e in Quality)), unique=True, nullable=False),
-)
-@sa.event.listens_for(Quality.table, 'after_create')
-def table_quality_populate(target, connection, **kwargs):
-    connection.execute(
-        sa.insert(Quality.table),
-        [{Quality.__name__: e} for e in Quality]
-    )
-    # connection.commit()
+# Quality.table = sa.Table(
+#     Quality.__name__,
+#     mapper_registry.metadata,
+#     sa.Column('id', sa.Integer, primary_key=True),
+#     sa.Column(Quality.__name__, sa.String(max(len(e.value) for e in Quality)), unique=True, nullable=False),
+# )
+# @sa.event.listens_for(Quality.table, 'after_create')
+# def table_quality_populate(target, connection, **kwargs):
+#     connection.execute(
+#         sa.insert(Quality.table),
+#         [{Quality.__name__: e} for e in Quality]
+#     )
+#     # connection.commit()
 
 
 class Field(CfgWithTable):
@@ -75,11 +75,13 @@ class Model(CfgWithTable):
     ))
     name: str = field(default='CNN', metadata=dict(sa=sa.Column(sa.String(3))))
     name2: str = field(default='RNN', metadata=dict(sa=sa.Column(sa.String(3))))
-    quality_id: int = field(init=False, repr=False, metadata=dict(
-        sa=sa.Column(sa.ForeignKey(f'{Quality.__name__}.id'), nullable=False),
-        omegaconf_ignore=True,
+    # quality_id: int = field(init=False, repr=False, metadata=dict(
+    #     sa=sa.Column(sa.ForeignKey(f'{Quality.__name__}.id'), nullable=False),
+    #     omegaconf_ignore=True,
+    # ))
+    quality: Quality = field(default=Quality.GOOD, metadata=dict(
+        sa=sa.Column(sa.Enum(Quality, values_callable=lambda x: [e.value for e in x]), nullable=False)
     ))
-    quality: Quality = field(default=Quality.GOOD)
     fields: typing.List[Field] = field(default_factory=list, metadata=dict(sa=orm.relationship(Field.__name__, secondary=lambda: table_m2m_model_field)))
     _target_: str = field(default=f'{MODULE_NAME}.{__qualname__}', repr=False)
 
@@ -124,12 +126,13 @@ def instantiate_and_insert_config(session, cfg):
     m2m = {}
     for k, v in cfg.items():
         if isinstance(v, enum.Enum):
-            table = v.__class__.table
-            stmt = sa.select(table).where(getattr(table.c, v.__class__.__name__) == v)
-            rows = session.execute(stmt)
-            rows = list(zip(range(2), rows))
-            assert len(rows) == 1
-            record[f'{k}_id'] = rows[0][1].id
+            record[k] = v
+            # table = v.__class__.table
+            # stmt = sa.select(table).where(getattr(table.c, v.__class__.__name__) == v)
+            # rows = session.execute(stmt)
+            # rows = list(zip(range(2), rows))
+            # assert len(rows) == 1
+            # record[f'{k}_id'] = rows[0][1].id
         elif isinstance(v, (dict, omegaconf.DictConfig)):
             row = instantiate_and_insert_config(session, v)
             record[f'{k}_id'] = row.id
@@ -201,6 +204,17 @@ def detach_config_from_session(sc, session):
     stmt = sa.select(sc.__class__).where(sc.__class__.id == sc.id).options(orm.joinedload('*'))
     sc = session.execute(stmt).unique().first()[0]
     return sc
+
+
+def _map_enums(mapper, connection, target):
+    for f in dataclasses.fields(target):
+        if isinstance(f.type, enum.EnumMeta):
+            table = f.type.table
+            stmt = sa.select(table).where(getattr(table.c, f.type.__name__) == getattr(target, f.name))
+            rows = connection.execute(stmt)
+            _, rows = zip(*list(zip(range(2), rows)))
+            assert len(rows) == 1
+            setattr(target, f.name, rows[0].id)
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
