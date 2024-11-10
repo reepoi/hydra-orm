@@ -120,8 +120,6 @@ mapper_registry.metadata.create_all(engine)
 
 
 def instantiate_and_insert_config(session, cfg):
-    # set unique constraint on all columns
-    # do upserts with returning: https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#using-returning-with-upsert-statements
     record = {}
     m2m = {}
     for k, v in cfg.items():
@@ -190,11 +188,19 @@ def instantiate_and_insert_config(session, cfg):
         assert len(rows) == 1
         row = rows[0]
 
-        for k, v in m2m.items():
-            setattr(row, k, v)
-        session.add(row)
+        if len(m2m) > 0:
+            for k, v in m2m.items():
+                setattr(row, k, v)
+            session.add(row)
 
         return row
+
+
+def detach_config_from_session(sc, session):
+    # remember to set expire_on_commit in the session?
+    stmt = sa.select(sc.__class__).where(sc.__class__.id == sc.id).options(orm.joinedload('*'))
+    sc = session.execute(stmt).unique().first()[0]
+    return sc
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
