@@ -129,9 +129,9 @@ def instantiate_and_insert_config(session, cfg):
             table = v.__class__.table
             stmt = sa.select(table).where(getattr(table.c, v.__class__.__name__) == v)
             rows = session.execute(stmt)
-            _, rows = zip(*list(zip(range(2), rows)))
+            rows = list(zip(range(2), rows))
             assert len(rows) == 1
-            record[f'{k}_id'] = rows[0].id
+            record[f'{k}_id'] = rows[0][1].id
         elif isinstance(v, (dict, omegaconf.DictConfig)):
             row = instantiate_and_insert_config(session, v)
             record[f'{k}_id'] = row.id
@@ -145,29 +145,56 @@ def instantiate_and_insert_config(session, cfg):
             record[k] = v
 
     table = globals()[cfg['_target_'].split('.')[1]]
-    stmt = (
-        sa.dialects.sqlite
-        .insert(table)
-        .values([record])
-        .returning(table)
-    )
-
-    if len(table.__table_args__) > 0:
-        stmt = (
-            stmt.on_conflict_do_update(index_elements=table.__table_args__[0], set_=record)
-        )
-    rows = session.scalars(stmt, execution_options=dict(populate_existing=True))
-    _, rows = zip(*list(zip(range(2), rows)))
-    assert len(rows) == 1
-    row = rows[0]
 
     if len(m2m) > 0:
+        unwanted_subqueries = []
+        table_alias_candidates = orm.aliased(
+            table, sa.select(table).filter_by(**record).subquery('candidates')
+        )
+        for k, v in m2m.items():
+            if len(v) > 0:
+                table_related = v[0].__class__
+                unwanted_related = (
+                    sa.select(table_related.id)
+                    .where(table_related.id.notin_([vv.id for vv in v]))
+                )
+                unwanted_subquery = (
+                    sa.select(table_alias_candidates.id)
+                    .join(getattr(table_alias_candidates, k))
+                    .where(table_related.id.in_(unwanted_related))
+                )
+                unwanted_subqueries.append(unwanted_subquery)
+        unwanted_query = sa.union_all(*unwanted_subqueries)
+        candidates_query = sa.select(table_alias_candidates).where(table_alias_candidates.id.notin_(unwanted_query))
+        candidates = session.execute(candidates_query)
+        candidates = list(zip(range(2), candidates))
+        assert len(candidates) <= 1
+        if len(candidates) == 1:
+            row = candidates[0][1][0]
+            return row
+
+    if len(m2m) == 0 or len(candidates) == 0:
+        stmt = (
+            sa.dialects.sqlite
+            .insert(table)
+            .values([record])
+            .returning(table)
+        )
+        if len(table.__table_args__) > 0:
+            assert table.__table_args__[0].__class__ is sa.UniqueConstraint
+            stmt = (
+                stmt.on_conflict_do_update(index_elements=table.__table_args__[0], set_=record)
+            )
+        rows = session.scalars(stmt, execution_options=dict(populate_existing=True))
+        _, rows = zip(*list(zip(range(2), rows)))
+        assert len(rows) == 1
+        row = rows[0]
+
         for k, v in m2m.items():
             setattr(row, k, v)
         session.add(row)
-        session.flush()
 
-    return row
+        return row
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
