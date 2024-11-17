@@ -43,7 +43,7 @@ class Quality(str, enum.Enum):
 #         sa.insert(Quality.table),
 #         [{Quality.__name__: e} for e in Quality]
 #     )
-#     # connection.commit()
+#     connection.commit()
 
 
 class Field(CfgWithTable):
@@ -148,25 +148,41 @@ def instantiate_and_insert_config(session, cfg):
     table = globals()[cfg['_target_'].split('.')[1]]
 
     if len(m2m) > 0:
-        unwanted_subqueries = []
         table_alias_candidates = orm.aliased(
             table, sa.select(table).filter_by(**record).subquery('candidates')
         )
+        table_fields = {f.name: f for f in dataclasses.fields(table)}
+        subqueries = []
         for k, v in m2m.items():
             if len(v) > 0:
                 table_related = v[0].__class__
-                unwanted_related = (
-                    sa.select(table_related.id)
-                    .where(table_related.id.notin_([vv.id for vv in v]))
+                has_subset_of_relations = orm.aliased(
+                    table, (
+                        sa.select(table_alias_candidates.id)
+                        .join(getattr(table_alias_candidates, k))
+                        .where(table_related.id.in_([vv.id for vv in v]))
+                        .distinct()
+                    ).subquery('has_subset_of_relations')
                 )
-                unwanted_subquery = (
+                subquery = (
+                    sa.select(has_subset_of_relations.id)
+                    .join(getattr(has_subset_of_relations, k))
+                    .group_by(has_subset_of_relations.id)
+                    .having(sa.func.count(table_related.id) == len(v))
+                )
+                subqueries.append(subquery)
+            else:
+                m2m_rel = table_fields[k].metadata['sa']
+                m2m_table_col = getattr(m2m_rel.secondary.c, table.__name__)
+                # m2m_related_col = getattr(m2m_rel.secondary.c, m2m_rel.argument)
+                has_relation = sa.select(m2m_table_col)
+                subquery = (
                     sa.select(table_alias_candidates.id)
-                    .join(getattr(table_alias_candidates, k))
-                    .where(table_related.id.in_(unwanted_related))
+                    .where(table_alias_candidates.id.notin_(has_relation))
                 )
-                unwanted_subqueries.append(unwanted_subquery)
-        unwanted_query = sa.union_all(*unwanted_subqueries)
-        candidates_query = sa.select(table_alias_candidates).where(table_alias_candidates.id.notin_(unwanted_query))
+                subqueries.append(subquery)
+        query = sa.intersect_all(*subqueries)
+        candidates_query = sa.select(table_alias_candidates).where(table_alias_candidates.id.in_(query))
         candidates = session.execute(candidates_query)
         candidates = list(zip(range(2), candidates))
         assert len(candidates) <= 1
