@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 
 
-engine = sa.create_engine('sqlite+pysqlite:///runs.sqlite')
+# engine = sa.create_engine('sqlite+pysqlite:///runs.sqlite')
 
 
 mapper_registry = orm.registry()
@@ -118,7 +118,8 @@ class Config(CfgWithTable):
     # use __main__ if instantiation depends on globals used in __post_init__
 
 
-mapper_registry.metadata.create_all(engine)
+def create_all(engine):
+    mapper_registry.metadata.create_all(engine)
 
 
 def instantiate_and_insert_config(session, cfg):
@@ -206,9 +207,9 @@ def instantiate_and_insert_config(session, cfg):
     return row
 
 
-def detach_config_from_session(sc, session):
+def detach_config_from_session(table, row_id, session):
     # remember to set expire_on_commit in the session?
-    stmt = sa.select(sc.__class__).where(sc.__class__.id == sc.id).options(orm.joinedload('*'))
+    stmt = sa.select(table).where(table.id == row_id).options(orm.joinedload('*'))
     sc = session.execute(stmt).unique().first()[0]
     return sc
 
@@ -225,4 +226,4 @@ def _map_enums(mapper, connection, target):
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
-cs.store(name='config', node=Config)
+cs.store(name='Config', node=Config)
