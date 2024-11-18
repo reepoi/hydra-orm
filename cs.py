@@ -124,34 +124,26 @@ mapper_registry.metadata.create_all(engine)
 def instantiate_and_insert_config(session, cfg):
     record = {}
     m2m = {}
+    table = globals()[cfg['_target_'].split('.')[1]]
+    table_fields = {f.name: f for f in dataclasses.fields(table)}
     for k, v in cfg.items():
         if isinstance(v, enum.Enum):
             record[k] = v
-            # table = v.__class__.table
-            # stmt = sa.select(table).where(getattr(table.c, v.__class__.__name__) == v)
-            # rows = session.execute(stmt)
-            # rows = list(zip(range(2), rows))
-            # assert len(rows) == 1
-            # record[f'{k}_id'] = rows[0][1].id
         elif isinstance(v, (dict, omegaconf.DictConfig)):
             row = instantiate_and_insert_config(session, v)
-            record[f'{k}_id'] = row.id
+            record[k] = row
         elif isinstance(v, (list, omegaconf.ListConfig)):
             rows = [
                 instantiate_and_insert_config(session, vv) for vv in v
             ]
             m2m[k] = rows
-        # else:
-        elif k != '_target_':
+        elif k != '_target_' and table_fields[k].init:
             record[k] = v
-
-    table = globals()[cfg['_target_'].split('.')[1]]
 
     if len(m2m) > 0:
         table_alias_candidates = orm.aliased(
             table, sa.select(table).filter_by(**record).subquery('candidates')
         )
-        table_fields = {f.name: f for f in dataclasses.fields(table)}
         subqueries = []
         for k, v in m2m.items():
             if len(v) > 0:
@@ -190,29 +182,28 @@ def instantiate_and_insert_config(session, cfg):
             row = candidates[0][1][0]
             return row
 
-    if len(m2m) == 0 or len(candidates) == 0:
-        stmt = (
-            sa.dialects.sqlite
-            .insert(table)
-            .values([record])
-            .returning(table)
-        )
-        if len(table.__table_args__) > 0:
-            assert table.__table_args__[0].__class__ is sa.UniqueConstraint
-            stmt = (
-                stmt.on_conflict_do_update(index_elements=table.__table_args__[0], set_=record)
-            )
-        rows = session.scalars(stmt, execution_options=dict(populate_existing=True))
-        _, rows = zip(*list(zip(range(2), rows)))
-        assert len(rows) == 1
-        row = rows[0]
+    # with session.no_autoflush:
+    add_row = True
+    if len(m2m) == 0:
+        saved_rows = session.execute(sa.select(table).filter_by(**record))
+        saved_rows = list(zip(range(2), saved_rows))
+        assert len(saved_rows) <= 1
+        if len(saved_rows) == 1:
+            row = saved_rows[0][1][0]
+            add_row = False
 
-        if len(m2m) > 0:
-            for k, v in m2m.items():
-                setattr(row, k, v)
-            session.add(row)
+    if add_row:
+        row = table(**record)
 
-        return row
+    for k, v in m2m.items():
+        setattr(row, k, v)
+        add_row = True
+
+    if add_row:
+        session.add(row)
+        session.commit()
+
+    return row
 
 
 def detach_config_from_session(sc, session):
