@@ -14,6 +14,10 @@ from hydra_orm import orm
     ['string=STRING2'],
     ['sub_config_many_to_many=[{value:1}]'],
     ['sub_config_many_to_many=[{value:1},{value:2}]'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
 ])
 def test_insert_then_fetch_all_defaults(engine, overrides):
     cfg = init_hydra_cfg('Config', overrides)

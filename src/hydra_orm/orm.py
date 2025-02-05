@@ -54,7 +54,7 @@ def _db_row_hash(row):
     return hash(row.id)
 
 
-class CfgWithTableMetaclass(type):
+class TableMetaclass(type):
     def __new__(cls, clsname, bases, attrs):
         if len(bases) == 0:
             return super().__new__(cls, clsname, bases, attrs)
@@ -111,7 +111,7 @@ class CfgWithTableMetaclass(type):
         return mapper_registry.mapped(dataclass(super().__new__(cls, clsname, bases, attrs)))
 
 
-class CfgWithTableInheritableMetaclass(CfgWithTableMetaclass):
+class InheritableTableMetaclass(TableMetaclass):
     def __new__(cls, clsname, bases, attrs):
         if len(bases) == 0:
             return super().__new__(cls, clsname, bases, attrs)
@@ -123,7 +123,7 @@ class CfgWithTableInheritableMetaclass(CfgWithTableMetaclass):
         ))
         if '__annotations__' not in attrs:
             _set_attribute(attrs, '__annotations__', {})
-        if CfgWithTableInheritable in bases:
+        if InheritableTable in bases:
             _set_typed_attribute(
                 attrs, 'sa_inheritance', str,
                 field(init=False, metadata={
@@ -142,11 +142,11 @@ class CfgWithTableInheritableMetaclass(CfgWithTableMetaclass):
         return super().__new__(cls, clsname, bases, attrs)
 
 
-class CfgWithTable(metaclass=CfgWithTableMetaclass):
+class Table(metaclass=TableMetaclass):
     pass
 
 
-class CfgWithTableInheritable(metaclass=CfgWithTableInheritableMetaclass):
+class InheritableTable(metaclass=InheritableTableMetaclass):
     pass
 
 

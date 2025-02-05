@@ -1,5 +1,6 @@
 import string
 import random
+from dataclasses import field
 
 import sqlalchemy as sa
 
@@ -18,3 +19,7 @@ def set_attr_to_func_value(table, attr_name, func, unique=True):
             ).first() is None:
                 break
     return _set
+
+
+def make_defaults_list(defaults_list):
+    return field(repr=False, default_factory=lambda: defaults_list)
