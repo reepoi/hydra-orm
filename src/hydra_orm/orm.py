@@ -64,13 +64,14 @@ class CfgWithTableMetaclass(type):
         attrs['__sa_dataclass_metadata_key__'] = SQLALCHEMY_DATACLASS_METADATA_KEY
         _set_attribute(attrs, '__tablename__', clsname)
         _set_typed_attribute(attrs, '_target_', str, field(default=f"{attrs['__module__']}.{clsname}", repr=False))
-        _set_typed_attribute(
-            attrs, 'id', int,
-            field(init=False, metadata={
-                SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.Integer, primary_key=True),
-                'omegaconf_ignore': True,
-            })
-        )
+        if 'id' not in attrs:
+            _set_typed_attribute(
+                attrs, 'id', int,
+                field(init=False, metadata={
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.Integer, primary_key=True),
+                    'omegaconf_ignore': True,
+                })
+            )
         _set_attribute(attrs, '__hash__', _db_row_hash)
 
         for k, v in list(attrs.items()):
@@ -108,6 +109,45 @@ class CfgWithTableMetaclass(type):
                 attrs[k] = field(**config_field_kwargs)
                 attrs['__annotations__'][k] = typing.List[v.config] if v.enforce_element_type else typing.List[typing.Any]
         return mapper_registry.mapped(dataclass(super().__new__(cls, clsname, bases, attrs)))
+
+
+class CfgWithTableInheritableMetaclass(CfgWithTableMetaclass):
+    def __new__(cls, clsname, bases, attrs):
+        if len(bases) == 0:
+            return super().__new__(cls, clsname, bases, attrs)
+        if '__mapper_args__' not in attrs:
+            _set_attribute(attrs, '__mapper_args__', {})
+        attrs['__mapper_args__'].update(dict(
+            polymorphic_on=f'{SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance',
+            polymorphic_identity=clsname,
+        ))
+        if '__annotations__' not in attrs:
+            _set_attribute(attrs, '__annotations__', {})
+        if CfgWithTableInheritable in bases:
+            _set_typed_attribute(
+                attrs, 'sa_inheritance', str,
+                field(init=False, metadata={
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: ColumnRequired(sa.String(20)),
+                    'omegaconf_ignore': True,
+                })
+            )
+        else:
+            _set_typed_attribute(
+                attrs, 'id', int,
+                field(init=False, metadata={
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.ForeignKey(f'{bases[0].__name__}.id'), primary_key=True),
+                    'omegaconf_ignore': True,
+                })
+            )
+        return super().__new__(cls, clsname, bases, attrs)
+
+
+class CfgWithTable(metaclass=CfgWithTableMetaclass):
+    pass
+
+
+class CfgWithTableInheritable(metaclass=CfgWithTableInheritableMetaclass):
+    pass
 
 
 def _set_attribute(attrs, attr_name, attr_value):
