@@ -1,0 +1,257 @@
+import dataclasses
+from dataclasses import dataclass, field
+import enum
+import functools
+import typing
+
+import hydra
+import omegaconf
+import sqlalchemy as sa
+import sqlalchemy.orm as sa_orm
+
+
+mapper_registry = sa_orm.registry()
+
+
+SQLALCHEMY_DATACLASS_METADATA_KEY = 'sa'
+
+
+ColumnRequired = functools.partial(sa.Column, nullable=False)
+
+
+def make_field(column, omegaconf_ignore=False, metadata_extra=None, **field_kwargs):
+    if 'metadata' in field_kwargs:
+        raise ValueError(
+            f"Found key 'metadata' keyword argument for {column=}."
+            " Please pass any metadata as the keyword 'metadata_extra' instead."
+        )
+    metadata_extra = metadata_extra or {}
+    return field(**field_kwargs, metadata={
+        SQLALCHEMY_DATACLASS_METADATA_KEY: column,
+        'omegaconf_ignore': omegaconf_ignore,
+        **metadata_extra,
+    })
+
+
+@dataclass
+class OneToManyField:
+    config: typing.Any
+    required: bool
+    default: typing.Optional[typing.Any] = field(default=None)
+    default_factory: typing.Optional[typing.Callable] = field(default=None)
+    enforce_element_type: bool = field(default=True)
+
+
+@dataclass
+class ManyToManyField:
+    config: typing.Any
+    default: typing.Optional[typing.List[typing.Any]] = field(default=None)
+    default_factory: typing.Optional[typing.List[typing.Callable]] = field(default=None)
+    enforce_element_type: bool = field(default=True)
+
+
+class ExpandRelationshipFields(type):
+    def __new__(cls, clsname, bases, attrs):
+        for k, v in list(attrs.items()):
+            if isinstance(v, OneToManyField):
+                config_id_column = ColumnRequired if v.required else sa.Column
+                attrs[f'{k}_id'] = field(init=False, repr=False, metadata={
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: config_id_column(v.config.__name__, sa.ForeignKey(f'{v.config.__name__}.id')),
+                    'omegaconf_ignore': True,
+                })
+                attrs['__annotations__'][f'{k}_id'] = int
+
+                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, foreign_keys=[attrs[f'{k}_id'].metadata[SQLALCHEMY_DATACLASS_METADATA_KEY]])})
+                if v.default_factory is not None and v.default is not None:
+                    raise ValueError(f'For the {OneToManyField.__name__} field {clsname}.{k}, specify exactly one of default={v.default} or default_factory={v.default_factory}, not both.')
+                if v.default_factory is not None:
+                    config_field_kwargs['default_factory'] = v.default_factory
+                else:
+                    config_field_kwargs['default'] = v.default
+                attrs[k] = field(**config_field_kwargs)
+                attrs['__annotations__'][k] = v.config if v.enforce_element_type else typing.Any
+            elif isinstance(v, ManyToManyField):
+                m2m_table = sa.Table(
+                    f'{clsname}__{v.config.__name__}',
+                    mapper_registry.metadata,
+                    sa.Column(clsname, sa.ForeignKey(f'{clsname}.id'), primary_key=True),
+                    sa.Column(v.config.__name__, sa.ForeignKey(f'{v.config.__name__}.id'), primary_key=True),
+                )
+                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, secondary=lambda: m2m_table)})
+                if v.default_factory is not None and v.default is not None:
+                    raise ValueError(f'For the {ManyToManyField.__name__} field {clsname}.{k}, specify exactly one of default={v.default} or default_factory={v.default_factory}, not both.')
+                if v.default_factory is not None:
+                    config_field_kwargs['default_factory'] = v.default_factory
+                else:
+                    config_field_kwargs['default'] = v.default
+                attrs[k] = field(**config_field_kwargs)
+                attrs['__annotations__'][k] = typing.List[v.config] if v.enforce_element_type else typing.List[typing.Any]
+        return super().__new__(cls, clsname, bases, attrs)
+
+
+def _set_attribute(cls, attr_name, attr_value):
+    if (existing_attr_value := getattr(cls, attr_name, None)) is not None:
+        raise ValueError(
+            f'Trying to set {cls.__name__}.{attr_name}, but it is already defined with the value {existing_attr_value}.'
+            f' Please remove any prior definitions of {cls.__name__}.{attr_name}.'
+        )
+    setattr(cls, attr_name, attr_value)
+
+
+def _set_typed_attribute(cls, attr_name, attr_type, attr_value):
+    _set_attribute(cls, attr_name, attr_value)
+    cls.__annotations__[attr_name] = attr_type
+
+
+class CfgWithTable(metaclass=ExpandRelationshipFields):
+    __sa_dataclass_metadata_key__ = SQLALCHEMY_DATACLASS_METADATA_KEY
+
+    def __init_subclass__(cls):
+        if not hasattr(cls, '__annotations__'):
+            _set_attribute(cls,  '__annotations__', {})
+        _set_attribute(cls, '__tablename__', cls.__name__)
+        _set_typed_attribute(cls, '_target_', str, field(default=f'{cls.__module__}.{cls.__name__}', repr=False))
+        _set_typed_attribute(
+            cls, 'id', int,
+            field(init=False, metadata={
+                SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.Integer, primary_key=True),
+                'omegaconf_ignore': True,
+            })
+        )
+        cls.__hash__ = CfgWithTable.__hash__
+        return mapper_registry.mapped(dataclass(cls))
+
+    def __hash__(self):
+        return hash(self.id)
+
+
+class CfgWithTableInheritable(metaclass=ExpandRelationshipFields):
+    def __init_subclass__(cls):
+        if not hasattr(cls, '__mapper_args__'):
+            _set_attribute(cls, '__mapper_args__', {})
+        cls.__mapper_args__.update(dict(
+            polymorphic_on=f'{SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance',
+            polymorphic_identity=cls.__name__,
+        ))
+        if not hasattr(cls, '__annotations__'):
+            _set_attribute(cls,  '__annotations__', {})
+        if cls.__bases__[0] is CfgWithTableInheritable:
+            _set_typed_attribute(
+                cls, 'sa_inheritance', str,
+                field(init=False, metadata={
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: ColumnRequired(sa.String(20)),
+                    'omegaconf_ignore': True,
+                })
+            )
+        return cls.__init_subclass__()
+
+
+def create_all(engine):
+    mapper_registry.metadata.create_all(engine)
+
+
+def store_config(node, group=None):
+    cs = hydra.core.config_store.ConfigStore.instance()
+    cs.store(group=group, name=node.__name__, node=node)
+
+
+def instantiate_and_insert_config(session, cfg):
+    if not isinstance(cfg, (omegaconf.DictConfig, dict)):
+        raise ValueError(f'Tried to instantiate: {cfg=}')
+    record = {}
+    m2m = {}
+    table = hydra.utils.instantiate(dict(_target_=cfg['_target_'])).__class__
+    table_fields = {f.name: f for f in dataclasses.fields(table)}
+    for k, v in cfg.items():
+        if isinstance(v, enum.Enum):
+            record[k] = v
+        elif isinstance(v, (dict, omegaconf.DictConfig)):
+            row = instantiate_and_insert_config(session, v)
+            record[k] = row
+        elif isinstance(v, (list, omegaconf.ListConfig)):
+            if hasattr(table, f'transform_{k}') and callable(getattr(table, f'transform_{k}')):
+                transform = getattr(table, f'transform_{k}')
+                rows = transform(session, v)
+            else:
+                rows = [
+                    instantiate_and_insert_config(session, vv) for vv in v
+                ]
+            m2m[k] = rows
+        elif k != '_target_' and table_fields[k].init and 'sa' in table_fields[k].metadata:
+            if hasattr(table, f'transform_{k}') and callable(getattr(table, f'transform_{k}')):
+                transform = getattr(table, f'transform_{k}')
+                v = transform(session, v)
+            record[k] = v
+
+    if len(m2m) > 0:
+        if hasattr(table, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
+            table_alias_candidates = sa_orm.aliased(
+                table, sa.select(table).filter_by(**record, sa_inheritance=table.__mapper_args__['polymorphic_identity']).subquery('candidates')
+            )
+        else:
+            table_alias_candidates = sa_orm.aliased(
+                table, sa.select(table).filter_by(**record).subquery('candidates')
+            )
+        subqueries = []
+        for k, v in m2m.items():
+            if len(v) > 0:
+                table_related = v[0].__class__
+                if hasattr(table_related, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
+                    table_related = table_related.__mro__[-3]
+                has_subset_of_relations = sa_orm.aliased(
+                    table, (
+                        sa.select(table_alias_candidates.id)
+                        .join(getattr(table_alias_candidates, k))
+                        .where(table_related.id.in_([vv.id for vv in v]))
+                        .distinct()
+                    ).subquery('has_subset_of_relations')
+                )
+                subquery = (
+                    sa.select(has_subset_of_relations.id)
+                    .join(getattr(has_subset_of_relations, k))
+                    .group_by(has_subset_of_relations.id)
+                    .having(sa.func.count(table_related.id) == len(v))
+                )
+                subqueries.append(subquery)
+            else:
+                m2m_rel = table_fields[k].metadata['sa']
+                m2m_table_name = m2m_rel.parent.class_.__name__
+                m2m_table_col = getattr(m2m_rel.secondary.c, m2m_table_name)
+                # m2m_related_col = getattr(m2m_rel.secondary.c, m2m_rel.argument)
+                has_relation = sa.select(m2m_table_col)
+                subquery = (
+                    sa.select(table_alias_candidates.id)
+                    .where(table_alias_candidates.id.notin_(has_relation))
+                )
+                subqueries.append(subquery)
+        query = sa.intersect(*subqueries)
+        candidates_query = sa.select(table_alias_candidates).where(table_alias_candidates.id.in_(query))
+        candidates = session.execute(candidates_query)
+        candidates = list(zip(range(2), candidates))
+        assert len(candidates) <= 1
+        if len(candidates) == 1:
+            row = candidates[0][1][0]
+            return row
+
+    # with session.no_autoflush:
+    if len(m2m) == 0:
+        if hasattr(table, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
+            saved_rows = session.execute(sa.select(table).filter_by(**record, sa_inheritance=table.__mapper_args__['polymorphic_identity']))
+        else:
+            saved_rows = session.execute(sa.select(table).filter_by(**record))
+        saved_rows = list(zip(range(2), saved_rows))
+        assert len(saved_rows) <= 1
+        if len(saved_rows) == 1:
+            row = saved_rows[0][1][0]
+        else:
+            row = table(**record)
+            session.add(row)
+            session.flush()
+    else:
+        for k, v in m2m.items():
+            record[k] = v
+        row = table(**record)
+        session.add(row)
+        session.flush()
+
+    return row
