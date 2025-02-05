@@ -38,6 +38,14 @@ class SubConfigOneToManyInheritance2(SubConfigOneToManySuperclass):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
+class SubConfigManyToManySuperclass(orm.InheritableTable):
+    value_superclass: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
+class SubConfigManyToManyInheritance1(SubConfigManyToManySuperclass):
+    value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
 class Config(orm.Table):
     defaults: typing.List[typing.Any] = hydra_orm.utils.make_defaults_list([
         dict(sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1.__name__),
@@ -49,6 +57,7 @@ class Config(orm.Table):
     sub_config_one_to_many = orm.OneToManyField(SubConfigOneToMany, required=True, default_factory=SubConfigOneToMany)
     sub_config_one_to_many_superclass = orm.OneToManyField(SubConfigOneToManySuperclass, required=True, default=omegaconf.MISSING)
     sub_config_many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
+    # sub_config_many_to_many_superclass = orm.ManyToManyField(SubConfigManyToManySuperclass, default_factory=list)
 
 
 sa.event.listens_for(Config, 'before_insert')(

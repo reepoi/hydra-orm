@@ -125,7 +125,7 @@ class InheritableTableMetaclass(TableMetaclass):
             _set_attribute(attrs, '__annotations__', {})
         if InheritableTable in bases:
             _set_typed_attribute(
-                attrs, 'sa_inheritance', str,
+                attrs, f'{SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance', str,
                 field(init=False, metadata={
                     SQLALCHEMY_DATACLASS_METADATA_KEY: ColumnRequired(sa.String(20)),
                     'omegaconf_ignore': True,
@@ -195,14 +195,14 @@ def instantiate_and_insert_config(session, cfg):
                     instantiate_and_insert_config(session, vv) for vv in v
                 ]
             m2m[k] = rows
-        elif k != '_target_' and table_fields[k].init and 'sa' in table_fields[k].metadata:
+        elif k != '_target_' and table_fields[k].init and SQLALCHEMY_DATACLASS_METADATA_KEY in table_fields[k].metadata:
             if hasattr(table, f'transform_{k}') and callable(getattr(table, f'transform_{k}')):
                 transform = getattr(table, f'transform_{k}')
                 v = transform(session, v)
             record[k] = v
 
     if len(m2m) > 0:
-        if hasattr(table, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
+        if table.__bases__[0] is InheritableTable:
             table_alias_candidates = sa_orm.aliased(
                 table, sa.select(table).filter_by(**record, sa_inheritance=table.__mapper_args__['polymorphic_identity']).subquery('candidates')
             )
@@ -214,8 +214,11 @@ def instantiate_and_insert_config(session, cfg):
         for k, v in m2m.items():
             if len(v) > 0:
                 table_related = v[0].__class__
-                if hasattr(table_related, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
-                    table_related = table_related.__mro__[-3]
+                if (
+                    table_related.__bases__[0] is not Table
+                    and table_related.__bases__[0] is not InheritableTable
+                ):
+                    table_related = table_related.__bases__[0]
                 has_subset_of_relations = sa_orm.aliased(
                     table, (
                         sa.select(table_alias_candidates.id)
@@ -232,7 +235,7 @@ def instantiate_and_insert_config(session, cfg):
                 )
                 subqueries.append(subquery)
             else:
-                m2m_rel = table_fields[k].metadata['sa']
+                m2m_rel = table_fields[k].metadata[SQLALCHEMY_DATACLASS_METADATA_KEY]
                 m2m_table_name = m2m_rel.parent.class_.__name__
                 m2m_table_col = getattr(m2m_rel.secondary.c, m2m_table_name)
                 # m2m_related_col = getattr(m2m_rel.secondary.c, m2m_rel.argument)
