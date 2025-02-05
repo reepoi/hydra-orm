@@ -50,8 +50,29 @@ class ManyToManyField:
     enforce_element_type: bool = field(default=True)
 
 
-class ExpandRelationshipFields(type):
+def _db_row_hash(row):
+    return hash(row.id)
+
+
+class CfgWithTableMetaclass(type):
     def __new__(cls, clsname, bases, attrs):
+        if len(bases) == 0:
+            return super().__new__(cls, clsname, bases, attrs)
+
+        if '__annotations__' not in attrs:
+            _set_attribute(attrs, '__annotations__', {})
+        attrs['__sa_dataclass_metadata_key__'] = SQLALCHEMY_DATACLASS_METADATA_KEY
+        _set_attribute(attrs, '__tablename__', clsname)
+        _set_typed_attribute(attrs, '_target_', str, field(default=f"{attrs['__module__']}.{clsname}", repr=False))
+        _set_typed_attribute(
+            attrs, 'id', int,
+            field(init=False, metadata={
+                SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.Integer, primary_key=True),
+                'omegaconf_ignore': True,
+            })
+        )
+        _set_attribute(attrs, '__hash__', _db_row_hash)
+
         for k, v in list(attrs.items()):
             if isinstance(v, OneToManyField):
                 config_id_column = ColumnRequired if v.required else sa.Column
@@ -86,64 +107,21 @@ class ExpandRelationshipFields(type):
                     config_field_kwargs['default'] = v.default
                 attrs[k] = field(**config_field_kwargs)
                 attrs['__annotations__'][k] = typing.List[v.config] if v.enforce_element_type else typing.List[typing.Any]
-        return super().__new__(cls, clsname, bases, attrs)
+        return mapper_registry.mapped(dataclass(super().__new__(cls, clsname, bases, attrs)))
 
 
-def _set_attribute(cls, attr_name, attr_value):
-    if (existing_attr_value := getattr(cls, attr_name, None)) is not None:
+def _set_attribute(attrs, attr_name, attr_value):
+    if (existing_attr_value := attrs.get(attr_name)) is not None:
         raise ValueError(
-            f'Trying to set {cls.__name__}.{attr_name}, but it is already defined with the value {existing_attr_value}.'
-            f' Please remove any prior definitions of {cls.__name__}.{attr_name}.'
+            f'Trying to set {attr_name}, but it is already defined with the value {existing_attr_value}.'
+            f' Please remove any prior definitions of {attr_name}.'
         )
-    setattr(cls, attr_name, attr_value)
+    attrs[attr_name] = attr_value
 
 
-def _set_typed_attribute(cls, attr_name, attr_type, attr_value):
-    _set_attribute(cls, attr_name, attr_value)
-    cls.__annotations__[attr_name] = attr_type
-
-
-class CfgWithTable(metaclass=ExpandRelationshipFields):
-    __sa_dataclass_metadata_key__ = SQLALCHEMY_DATACLASS_METADATA_KEY
-
-    def __init_subclass__(cls):
-        if not hasattr(cls, '__annotations__'):
-            _set_attribute(cls,  '__annotations__', {})
-        _set_attribute(cls, '__tablename__', cls.__name__)
-        _set_typed_attribute(cls, '_target_', str, field(default=f'{cls.__module__}.{cls.__name__}', repr=False))
-        _set_typed_attribute(
-            cls, 'id', int,
-            field(init=False, metadata={
-                SQLALCHEMY_DATACLASS_METADATA_KEY: sa.Column(sa.Integer, primary_key=True),
-                'omegaconf_ignore': True,
-            })
-        )
-        cls.__hash__ = CfgWithTable.__hash__
-        return mapper_registry.mapped(dataclass(cls))
-
-    def __hash__(self):
-        return hash(self.id)
-
-
-class CfgWithTableInheritable(metaclass=ExpandRelationshipFields):
-    def __init_subclass__(cls):
-        if not hasattr(cls, '__mapper_args__'):
-            _set_attribute(cls, '__mapper_args__', {})
-        cls.__mapper_args__.update(dict(
-            polymorphic_on=f'{SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance',
-            polymorphic_identity=cls.__name__,
-        ))
-        if not hasattr(cls, '__annotations__'):
-            _set_attribute(cls,  '__annotations__', {})
-        if cls.__bases__[0] is CfgWithTableInheritable:
-            _set_typed_attribute(
-                cls, 'sa_inheritance', str,
-                field(init=False, metadata={
-                    SQLALCHEMY_DATACLASS_METADATA_KEY: ColumnRequired(sa.String(20)),
-                    'omegaconf_ignore': True,
-                })
-            )
-        return cls.__init_subclass__()
+def _set_typed_attribute(attrs, attr_name, attr_type, attr_value):
+    _set_attribute(attrs, attr_name, attr_value)
+    attrs['__annotations__'][attr_name] = attr_type
 
 
 def create_all(engine):

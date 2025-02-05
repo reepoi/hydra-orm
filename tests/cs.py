@@ -13,33 +13,37 @@ from hydra_orm.orm import SQLALCHEMY_DATACLASS_METADATA_KEY as SA_KEY
 MODULE_NAME = Path(__file__).stem
 
 
+class CfgWithTable(metaclass=orm.CfgWithTableMetaclass):
+    pass
+
+
 class StringEnum(str, enum.Enum):
     STRING1 = 'string1'
     STRING2 = 'string2'
 
 
-class SubConfigManyToMany(orm.CfgWithTable):
+class SubConfigManyToMany(CfgWithTable):
     value: int = field(default=1, metadata={SA_KEY: orm.ColumnRequired(sa.Integer)})
 
 
-class SubConfigOneToMany(orm.CfgWithTable):
+class SubConfigOneToMany(CfgWithTable):
     value: int = field(default=1, metadata={SA_KEY: orm.ColumnRequired(sa.Integer)})
 
 
-class SubConfigOneToManySuperclass(orm.CfgWithTableInheritable):
-    pass
+# class SubConfigOneToManySuperclass(CfgWithTable):
+#     pass
+#
+#
+# class SubConfigOneToManyInheritance1(SubConfigOneToManySuperclass):
+#     pass
 
 
-class SubConfigOneToManyInheritance1(SubConfigOneToManySuperclass):
-    pass
-
-
-class Config(orm.CfgWithTable):
+class Config(CfgWithTable):
     alt_id: str = orm.make_field(orm.ColumnRequired(sa.String(8), index=True, unique=True), init=False, omegaconf_ignore=True)
     rng_seed: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=42)
     string: StringEnum = orm.make_field(orm.ColumnRequired(sa.Enum(StringEnum)), default=StringEnum.STRING1)
     sub_config_one_to_many = orm.OneToManyField(SubConfigOneToMany, required=True, default_factory=SubConfigOneToMany)
-    sub_config_one_to_many_superclass = orm.OneToManyField(SubConfigOneToManySuperclass, required=True, default_factory=SubConfigOneToManyInheritance1)
+    # sub_config_one_to_many_superclass = orm.OneToManyField(SubConfigOneToManySuperclass, required=True, default_factory=SubConfigOneToManyInheritance1)
     sub_config_many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
 
 
