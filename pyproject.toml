@@ -2,7 +2,7 @@
 name = "hydra-orm"
 version = "0.1.0"
 description = "ORM-backed Hydra configuration."
-readme = "README.md"
+readme = "README.rst"
 license = { file = "LICENSE" }
 authors = [
     { name = "Taos Transue", email = "" }
