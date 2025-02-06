@@ -1,6 +1,4 @@
-from dataclasses import field
 import enum
-from pathlib import Path
 import typing
 
 import omegaconf
@@ -8,9 +6,6 @@ import sqlalchemy as sa
 
 import hydra_orm.utils
 from hydra_orm import orm
-
-
-MODULE_NAME = Path(__file__).stem
 
 
 class StringEnum(str, enum.Enum):
