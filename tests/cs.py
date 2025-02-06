@@ -22,8 +22,22 @@ class SubConfigManyToMany(orm.Table):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
+class SubConfigManyToManySuperclass(orm.InheritableTable):
+    value_superclass: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
+class SubConfigManyToManyInheritance1(SubConfigManyToManySuperclass):
+    value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
+class SubConfigManyToManyInheritance2(SubConfigManyToManySuperclass):
+    value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
 class SubConfigOneToMany(orm.Table):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+    many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
+    many_to_many_superclass = orm.ManyToManyField(SubConfigManyToManySuperclass, default_factory=list)
 
 
 class SubConfigOneToManySuperclass(orm.InheritableTable):
@@ -35,14 +49,6 @@ class SubConfigOneToManyInheritance1(SubConfigOneToManySuperclass):
 
 
 class SubConfigOneToManyInheritance2(SubConfigOneToManySuperclass):
-    value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
-
-
-class SubConfigManyToManySuperclass(orm.InheritableTable):
-    value_superclass: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
-
-
-class SubConfigManyToManyInheritance1(SubConfigManyToManySuperclass):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 

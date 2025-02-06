@@ -18,6 +18,9 @@ from hydra_orm import orm
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance2}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'],
 ])
 def test_insert_then_fetch_all_defaults(engine, overrides):
     cfg = init_hydra_cfg('Config', overrides)
@@ -25,79 +28,144 @@ def test_insert_then_fetch_all_defaults(engine, overrides):
         cfg = orm.instantiate_and_insert_config(session, cfg)
         session.commit()
         cfg_fetched = session.execute(sa.select(cs.Config).where(cs.Config.id == cfg.id)).first()
+
         assert cfg_fetched is not None
         assert cfg == cfg_fetched[0]
 
 
-# @pytest.mark.parametrize('overrides', [
-#     [],
-#     ['model.quality=BAD'],
-#     ['model.fields=[{power: 1}]'],
-#     ['model.fields=[{power: 1},{power: 2}]'],
-#     ['model.fields=[{power: 1},{flower: 2}]'],
-# ])
-# def test_insert_then_fetch(engine, overrides):
-#     cfg = init_hydra_cfg('Config', overrides)
-#     with sa_orm.Session(engine, expire_on_commit=False) as session:
-#         sc = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#         session.commit()
-#         # detach refetches config
-#         sc_detached = cs.detach_config_from_session(sc.__class__, sc.id, session)
-#
-#         assert sc == sc_detached
-#
-#
-# @pytest.mark.parametrize('overrides', [
-#     [],
-#     ['model.quality=BAD'],
-#     ['model.fields=[{power: 1}]'],
-#     ['model.fields=[{power: 1},{power: 2}]'],
-#     ['model.fields=[{power: 1},{flower: 2}]'],
-# ])
-# def test_insert_deduplicate(engine, overrides):
-#     cfg = init_hydra_cfg('Config', overrides)
-#     scs = []
-#     with sa_orm.Session(engine, expire_on_commit=False) as session:
-#         for _ in range(2):
-#             sc = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#             session.commit()
-#             scs.append(sc)
-#
-#         assert scs[0] == scs[1]
-#
-#
-# def test_insert_different_column_values(engine):
-#     with sa_orm.Session(engine, expire_on_commit=False) as session:
-#         cfg = init_hydra_cfg('Config', ['model.quality=GOOD'])
-#         sc1 = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#         session.commit()
-#         cfg = init_hydra_cfg('Config', ['model.quality=BAD'])
-#         sc2 = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#
-#         sc1 != sc2
-#
-#
-# @pytest.mark.parametrize('overrides', [
-#     [],
-#     ['model.fields=[{power: 1}]'],
-# ])
-# def test_insert_deduplicate_m2m_strict_subset_exists(engine, overrides):
-#     with sa_orm.Session(engine, expire_on_commit=False) as session:
-#         cfg = init_hydra_cfg('Config', overrides)
-#         sc_ref = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#         session.commit()
-#         cfg = init_hydra_cfg('Config', ['model.fields=[{power: 1},{power: 2}]'])
-#         sc_new = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#
-#         assert sc_ref != sc_new
-#
-#
-# def test_insert_deduplicate_m2m_strict_superset_exists(engine):
-#     with sa_orm.Session(engine, expire_on_commit=False) as session:
-#         cfg = init_hydra_cfg('Config', ['model.fields=[{power: 1},{power: 2}]'])
-#         sc_ref = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#         session.commit()
-#         cfg = init_hydra_cfg('Config', ['model.fields=[{power: 1}]'])
-#         sc_new = orm.instantiate_and_insert_config(session, OmegaConf.to_container(cfg))
-#
-#         assert sc_ref != sc_new
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
+])
+def test_deduplicate_one_to_many(engine, overrides):
+    cfg_dict = init_hydra_cfg('Config', overrides)
+    cfgs = []
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        for _ in range(2):
+            cfg = orm.instantiate_and_insert_config(session, cfg_dict)
+            session.commit()
+            cfgs.append(cfg)
+
+        cfg_a, cfg_b = cfgs
+        assert cfg_a.sub_config_one_to_many == cfg_b.sub_config_one_to_many
+        assert cfg_a.sub_config_one_to_many_superclass == cfg_b.sub_config_one_to_many_superclass
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_many_to_many=[{value:1}]'],
+    ['sub_config_many_to_many=[{value:1},{value:2}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance2}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'],
+    ['sub_config_many_to_many=[{value:1},{value:2}]', 'sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'],
+])
+def test_deduplicate_many_to_many(engine, overrides):
+    cfg_dict = init_hydra_cfg('Config', overrides)
+    cfgs = []
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        for _ in range(2):
+            cfg = orm.instantiate_and_insert_config(session, cfg_dict)
+            session.commit()
+            cfgs.append(cfg)
+
+        cfg_a, cfg_b = cfgs
+        assert cfg_a.sub_config_many_to_many == cfg_b.sub_config_many_to_many
+        assert cfg_a.sub_config_many_to_many_superclass == cfg_b.sub_config_many_to_many_superclass
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many.many_to_many=[{value:1}]'],
+    ['sub_config_one_to_many.many_to_many=[{value:1},{value:2}]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance2}]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'],
+])
+def test_deduplicate_nested_many_to_many(engine, overrides):
+    cfg_dict = init_hydra_cfg('Config', overrides)
+    cfgs = []
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        for _ in range(2):
+            cfg = orm.instantiate_and_insert_config(session, cfg_dict)
+            session.commit()
+            cfgs.append(cfg)
+
+        cfg_a, cfg_b = cfgs
+        assert cfg_a.sub_config_one_to_many == cfg_b.sub_config_one_to_many
+        assert cfg_a.sub_config_one_to_many_superclass == cfg_b.sub_config_one_to_many_superclass
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many.many_to_many=[]'],
+    ['sub_config_one_to_many.many_to_many=[{value:1}]'],
+])
+def test_different_when_many_to_many_strict_subset_exists(engine, overrides):
+    cfg_subset = init_hydra_cfg('Config', overrides)
+    cfg = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many=[{value:1},{value:2}]'])
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg_subset = orm.instantiate_and_insert_config(session, cfg_subset)
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        session.commit()
+
+        assert cfg_subset.sub_config_one_to_many != cfg.sub_config_one_to_many
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many.many_to_many_superclass=[]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
+])
+def test_different_when_many_to_many_superclass_strict_subset_exists(engine, overrides):
+    cfg_subset = init_hydra_cfg('Config', overrides)
+    cfg = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'])
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg_subset = orm.instantiate_and_insert_config(session, cfg_subset)
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        session.commit()
+
+        assert cfg_subset.sub_config_one_to_many != cfg.sub_config_one_to_many
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many.many_to_many=[]'],
+    ['sub_config_one_to_many.many_to_many=[{value:1}]'],
+])
+def test_different_when_many_to_many_strict_superset_exists(engine, overrides):
+    cfg_superset = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many=[{value:1},{value:2}]'])
+    cfg = init_hydra_cfg('Config', overrides)
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg_superset = orm.instantiate_and_insert_config(session, cfg_superset)
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        session.commit()
+
+        assert cfg.sub_config_one_to_many != cfg_superset.sub_config_one_to_many
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many.many_to_many_superclass=[]'],
+    ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
+])
+def test_different_when_many_to_many_superclass_strict_superset_exists(engine, overrides):
+    cfg_superset = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'])
+    cfg = init_hydra_cfg('Config', overrides)
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg_superset = orm.instantiate_and_insert_config(session, cfg_superset)
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        session.commit()
+
+        assert cfg.sub_config_one_to_many != cfg_superset.sub_config_one_to_many
+
+
+def test_different_sub_config_values(engine):
+    cfgs = []
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        for i in range(2):
+            cfg_dict = init_hydra_cfg('Config', [f'sub_config_one_to_many.value={i}', f'sub_config_one_to_many_superclass.value={i}'])
+            cfg = orm.instantiate_and_insert_config(session, cfg_dict)
+            session.commit()
+            cfgs.append(cfg)
+
+    cfg_a, cfg_b = cfgs
+    assert cfg_a.sub_config_one_to_many != cfg_b.sub_config_one_to_many
+    assert cfg_a.sub_config_one_to_many_superclass != cfg_b.sub_config_one_to_many_superclass
