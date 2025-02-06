@@ -1,7 +1,7 @@
 [project]
 name = "hydra-orm"
 version = "0.1.0"
-description = "Add your description here"
+description = "ORM-backed Hydra configuration."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
