@@ -57,7 +57,7 @@ class Config(orm.Table):
     sub_config_one_to_many = orm.OneToManyField(SubConfigOneToMany, required=True, default_factory=SubConfigOneToMany)
     sub_config_one_to_many_superclass = orm.OneToManyField(SubConfigOneToManySuperclass, required=True, default=omegaconf.MISSING)
     sub_config_many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
-    # sub_config_many_to_many_superclass = orm.ManyToManyField(SubConfigManyToManySuperclass, default_factory=list)
+    sub_config_many_to_many_superclass = orm.ManyToManyField(SubConfigManyToManySuperclass, default_factory=list)
 
 
 sa.event.listens_for(Config, 'before_insert')(

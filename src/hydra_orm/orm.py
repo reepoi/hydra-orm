@@ -99,7 +99,7 @@ class TableMetaclass(type):
                     sa.Column(clsname, sa.ForeignKey(f'{clsname}.id'), primary_key=True),
                     sa.Column(v.config.__name__, sa.ForeignKey(f'{v.config.__name__}.id'), primary_key=True),
                 )
-                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, secondary=lambda: m2m_table)})
+                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, secondary=m2m_table)})
                 if v.default_factory is not None and v.default is not None:
                     raise ValueError(f'For the {ManyToManyField.__name__} field {clsname}.{k}, specify exactly one of default={v.default} or default_factory={v.default_factory}, not both.')
                 if v.default_factory is not None:
