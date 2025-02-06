@@ -69,7 +69,7 @@ class Config(orm.Table):
 
 
 class ReferencingConfig(orm.Table):
-    config = orm.OneToManyField('Config', required=False, enforce_element_type=False)
+    config = orm.OneToManyField(Config, required=False, enforce_element_type=False)
 
     @staticmethod
     def transform_config(session, config_alt_id):
