@@ -169,3 +169,23 @@ def test_different_sub_config_values(engine):
     cfg_a, cfg_b = cfgs
     assert cfg_a.sub_config_one_to_many != cfg_b.sub_config_one_to_many
     assert cfg_a.sub_config_one_to_many_superclass != cfg_b.sub_config_one_to_many_superclass
+
+
+def test_dynamic_fetching_of_one_referenced_row(engine):
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg = init_hydra_cfg('Config', [])
+        config_alt_id = orm.instantiate_and_insert_config(session, cfg).alt_id
+        cfg = init_hydra_cfg('Config', [f'one_reference.config={config_alt_id}'])
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+
+
+def test_dynamic_fetching_of_list_of_referenced_row(engine):
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        config_alt_ids = []
+        for i in range(2):
+            cfg = init_hydra_cfg('Config', [f'sub_config_one_to_many.value={i}'])
+            config_alt_ids.append(orm.instantiate_and_insert_config(session, cfg).alt_id)
+        cfg = init_hydra_cfg('Config', [f"list_of_references=[{','.join(f'{{config:{c}}}' for c in config_alt_ids)}]"])
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+
+        assert {ref.config.alt_id for ref in cfg.list_of_references} == set(config_alt_ids)

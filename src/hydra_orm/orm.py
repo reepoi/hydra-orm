@@ -36,7 +36,7 @@ def make_field(column, omegaconf_ignore=False, metadata_extra=None, **field_kwar
 @dataclass
 class OneToManyField:
     config: typing.Any
-    required: bool
+    required: bool = field(default=True)
     default: typing.Optional[typing.Any] = field(default=None)
     default_factory: typing.Optional[typing.Callable] = field(default=None)
     enforce_element_type: bool = field(default=True)
@@ -76,14 +76,21 @@ class TableMetaclass(type):
 
         for k, v in list(attrs.items()):
             if isinstance(v, OneToManyField):
+                v_config_name = v.config if isinstance(v.config, str) else v.config.__name__
+                if v_config_name == clsname:
+                    raise ValueError(
+                        'Columns that are foreign keys to their own table are not supported.'
+                        f' This was attempted with the table {clsname}.'
+                        ' Please consider adding another table for an indirect reference.'
+                    )
                 config_id_column = ColumnRequired if v.required else sa.Column
                 attrs[f'{k}_id'] = field(init=False, repr=False, metadata={
-                    SQLALCHEMY_DATACLASS_METADATA_KEY: config_id_column(v.config.__name__, sa.ForeignKey(f'{v.config.__name__}.id')),
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: config_id_column(v_config_name, sa.ForeignKey(f'{v_config_name}.id')),
                     'omegaconf_ignore': True,
                 })
                 attrs['__annotations__'][f'{k}_id'] = int
 
-                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, foreign_keys=[attrs[f'{k}_id'].metadata[SQLALCHEMY_DATACLASS_METADATA_KEY]])})
+                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v_config_name, foreign_keys=[attrs[f'{k}_id'].metadata[SQLALCHEMY_DATACLASS_METADATA_KEY]])})
                 if v.default_factory is not None and v.default is not None:
                     raise ValueError(f'For the {OneToManyField.__name__} field {clsname}.{k}, specify exactly one of default={v.default} or default_factory={v.default_factory}, not both.')
                 if v.default_factory is not None:
@@ -92,14 +99,23 @@ class TableMetaclass(type):
                     config_field_kwargs['default'] = v.default
                 attrs[k] = field(**config_field_kwargs)
                 attrs['__annotations__'][k] = v.config if v.enforce_element_type else typing.Any
+                if not v.required:
+                    attrs['__annotations__'][k] = typing.Optional[attrs['__annotations__'][k]]
             elif isinstance(v, ManyToManyField):
+                v_config_name = v.config if isinstance(v.config, str) else v.config.__name__
+                if v_config_name == clsname:
+                    raise ValueError(
+                        'Columns that are foreign keys to their own table are not supported.'
+                        f' This was attempted with the table {clsname}.'
+                        ' Please consider adding another table for an indirect reference.'
+                    )
                 m2m_table = sa.Table(
-                    f'{clsname}__{v.config.__name__}',
+                    f'{clsname}__{v_config_name}',
                     mapper_registry.metadata,
                     sa.Column(clsname, sa.ForeignKey(f'{clsname}.id'), primary_key=True),
-                    sa.Column(v.config.__name__, sa.ForeignKey(f'{v.config.__name__}.id'), primary_key=True),
+                    sa.Column(v_config_name, sa.ForeignKey(f'{v_config_name}.id'), primary_key=True),
                 )
-                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v.config.__name__, secondary=m2m_table)})
+                config_field_kwargs = dict(metadata={SQLALCHEMY_DATACLASS_METADATA_KEY: sa_orm.relationship(v_config_name, secondary=m2m_table)})
                 if v.default_factory is not None and v.default is not None:
                     raise ValueError(f'For the {ManyToManyField.__name__} field {clsname}.{k}, specify exactly one of default={v.default} or default_factory={v.default_factory}, not both.')
                 if v.default_factory is not None:
