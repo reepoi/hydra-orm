@@ -81,7 +81,7 @@ sa.event.listens_for(Config, 'before_insert')(
 )
 
 
-orm.store_config(Config)
+orm.store_config(Config, name='base_Config')  # specify name so that conf_yaml/Config.yaml can override Config defaults without a name collision
 orm.store_config(SubConfigOneToManySuperclass, group=Config.sub_config_one_to_many_superclass.key)
 orm.store_config(SubConfigOneToManyInheritance1, group=Config.sub_config_one_to_many_superclass.key)
 orm.store_config(SubConfigOneToManyInheritance2, group=Config.sub_config_one_to_many_superclass.key)

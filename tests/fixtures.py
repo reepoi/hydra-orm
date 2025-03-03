@@ -15,5 +15,5 @@ def engine():
 
 
 def init_hydra_cfg(config_name, overrides):
-    with hydra.initialize(version_base=None):
+    with hydra.initialize(config_path='conf_yaml', version_base=None):
         return hydra.compose(config_name=config_name, overrides=overrides)
