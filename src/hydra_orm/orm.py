@@ -142,7 +142,7 @@ class InheritableTableMetaclass(TableMetaclass):
         if InheritableTable in bases:
             _set_typed_attribute(
                 attrs, f'{SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance', str,
-                field(init=False, metadata={
+                field(init=False, repr=False, metadata={
                     SQLALCHEMY_DATACLASS_METADATA_KEY: ColumnRequired(sa.String(20)),
                     'omegaconf_ignore': True,
                 })
@@ -184,9 +184,11 @@ def create_all(engine):
     mapper_registry.metadata.create_all(engine)
 
 
-def store_config(node, group=None):
+def store_config(node, group=None, name=None):
+    if name is None:
+        name = node.__name__
     cs = hydra.core.config_store.ConfigStore.instance()
-    cs.store(group=group, name=node.__name__, node=node)
+    cs.store(group=group, name=name, node=node)
 
 
 def instantiate_and_insert_config(session, cfg):

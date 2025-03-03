@@ -36,6 +36,17 @@ def test_insert_then_fetch_all_defaults(engine, overrides):
 @pytest.mark.parametrize('overrides', [
     ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
+])
+def test_inheritance_polymorphism_column_hidden(engine, overrides):
+    cfg = init_hydra_cfg('Config', overrides)
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        assert f'{orm.SQLALCHEMY_DATACLASS_METADATA_KEY}_inheritance=' not in repr(cfg)
+
+
+@pytest.mark.parametrize('overrides', [
+    ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
 ])
 def test_deduplicate_one_to_many(engine, overrides):
