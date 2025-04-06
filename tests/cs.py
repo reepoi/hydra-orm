@@ -58,6 +58,7 @@ class Config(orm.Table):
     sub_config_one_to_many = orm.OneToManyField(SubConfigOneToMany, default_factory=SubConfigOneToMany)
     sub_config_one_to_many_custom_column_name = orm.OneToManyField(SubConfigOneToMany, default_factory=SubConfigOneToMany, column_name=f'{SubConfigOneToMany.__name__}_custom_column_name')
     sub_config_one_to_many_superclass = orm.OneToManyField(SubConfigOneToManySuperclass, required=True, default=omegaconf.MISSING)
+    sub_config_one_to_many_superclass_element_type_not_enforced = orm.OneToManyField(SubConfigOneToManySuperclass, required=False, default=None, enforce_element_type=False, column_name='SubConfigOneToManySuperclass_element_type_not_enforced')
     sub_config_many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
     sub_config_many_to_many_custom_m2m_table_name = orm.ManyToManyField(SubConfigManyToMany, default_factory=list, m2m_table_name=f'{SubConfigManyToMany.__name__}_custom_m2m_table_name')
     sub_config_many_to_many_superclass = orm.ManyToManyField(SubConfigManyToManySuperclass, default_factory=list)

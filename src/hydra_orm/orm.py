@@ -198,7 +198,11 @@ def instantiate_and_insert_config(session, cfg):
         raise ValueError(f'Tried to instantiate: {cfg=}')
     record = {}
     m2m = {}
-    table = hydra.utils.instantiate(dict(_target_=cfg['_target_'])).__class__
+    instance = hydra.utils.instantiate(cfg, _recursive_=False)
+    table = instance.__class__
+    cfg = dataclasses.asdict(instance)
+    if 'defaults' in cfg:
+        del cfg['defaults']
     table_fields = {f.name: f for f in dataclasses.fields(table)}
     for k, v in cfg.items():
         if isinstance(v, enum.Enum):

@@ -65,6 +65,35 @@ def test_deduplicate_one_to_many(engine, overrides):
         assert cfg_a.sub_config_one_to_many_superclass == cfg_b.sub_config_one_to_many_superclass
 
 
+def test_superclass_defaults_are_set_when_only_given_subclass_overrides(engine):
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        # commit all defaults
+        cfg_dict = init_hydra_cfg(
+            'Config',
+            ['sub_config_one_to_many_superclass_element_type_not_enforced={_target_:cs.SubConfigOneToManyInheritance1}'],
+        )
+        cfg_default_value_superclass = orm.instantiate_and_insert_config(session, cfg_dict)
+        session.commit()
+
+        # override superclass value
+        cfg_dict = init_hydra_cfg(
+            'Config',
+            [f'sub_config_one_to_many_superclass_element_type_not_enforced={{_target_:cs.SubConfigOneToManyInheritance1,value_superclass:{cfg_default_value_superclass.sub_config_one_to_many_superclass_element_type_not_enforced.value_superclass+1}}}'],
+        )
+        orm.instantiate_and_insert_config(session, cfg_dict)
+        session.commit()
+
+        # override only subclass value
+        cfg_dict = init_hydra_cfg(
+            'Config',
+            [f'sub_config_one_to_many_superclass_element_type_not_enforced={{_target_:cs.SubConfigOneToManyInheritance1,value:{cfg_default_value_superclass.sub_config_one_to_many_superclass_element_type_not_enforced.value}}}'],
+        )
+        cfg = orm.instantiate_and_insert_config(session, cfg_dict)
+        session.commit()
+
+        assert cfg.sub_config_one_to_many_superclass_element_type_not_enforced.value_superclass == cfg_default_value_superclass.sub_config_one_to_many_superclass_element_type_not_enforced.value_superclass
+
+
 @pytest.mark.parametrize('overrides', [
     ['sub_config_many_to_many=[{value:1}]'],
     ['sub_config_many_to_many=[{value:1},{value:2}]'],
