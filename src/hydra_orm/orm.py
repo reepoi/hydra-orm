@@ -40,6 +40,7 @@ class OneToManyField:
     default: typing.Optional[typing.Any] = field(default=None)
     default_factory: typing.Optional[typing.Callable] = field(default=None)
     enforce_element_type: bool = field(default=True)
+    column_name: str = None
 
 
 @dataclass
@@ -48,6 +49,7 @@ class ManyToManyField:
     default: typing.Optional[typing.List[typing.Any]] = field(default=None)
     default_factory: typing.Optional[typing.List[typing.Callable]] = field(default=None)
     enforce_element_type: bool = field(default=True)
+    m2m_table_name: str = None
 
 
 def _db_row_hash(row):
@@ -85,7 +87,7 @@ class TableMetaclass(type):
                     )
                 config_id_column = ColumnRequired if v.required else sa.Column
                 attrs[f'{k}_id'] = field(init=False, repr=False, metadata={
-                    SQLALCHEMY_DATACLASS_METADATA_KEY: config_id_column(v_config_name, sa.ForeignKey(f'{v_config_name}.id')),
+                    SQLALCHEMY_DATACLASS_METADATA_KEY: config_id_column(v_config_name if v.column_name is None else v.column_name, sa.ForeignKey(f'{v_config_name}.id')),
                     'omegaconf_ignore': True,
                 })
                 attrs['__annotations__'][f'{k}_id'] = int
@@ -110,7 +112,7 @@ class TableMetaclass(type):
                         ' Please consider adding another table for an indirect reference.'
                     )
                 m2m_table = sa.Table(
-                    f'{clsname}__{v_config_name}',
+                    f'{clsname}__{v_config_name}' if v.m2m_table_name is None else v.m2m_table_name,
                     mapper_registry.metadata,
                     sa.Column(clsname, sa.ForeignKey(f'{clsname}.id'), primary_key=True),
                     sa.Column(v_config_name, sa.ForeignKey(f'{v_config_name}.id'), primary_key=True),

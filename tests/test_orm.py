@@ -14,6 +14,8 @@ from hydra_orm import orm
     ['string=STRING2'],
     ['sub_config_many_to_many=[{value:1}]'],
     ['sub_config_many_to_many=[{value:1},{value:2}]'],
+    ['sub_config_many_to_many_custom_m2m_table_name=[{value:1}]'],
+    ['sub_config_many_to_many_custom_m2m_table_name=[{value:1},{value:2}]'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
@@ -66,6 +68,8 @@ def test_deduplicate_one_to_many(engine, overrides):
 @pytest.mark.parametrize('overrides', [
     ['sub_config_many_to_many=[{value:1}]'],
     ['sub_config_many_to_many=[{value:1},{value:2}]'],
+    ['sub_config_many_to_many_custom_m2m_table_name=[{value:1}]'],
+    ['sub_config_many_to_many_custom_m2m_table_name=[{value:1},{value:2}]'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance2}]'],
