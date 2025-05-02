@@ -186,6 +186,17 @@ def test_different_when_many_to_many_strict_superset_exists(engine, overrides):
         assert cfg.sub_config_one_to_many != cfg_superset.sub_config_one_to_many
 
 
+def test_different_when_many_to_many_has_one_of_relation_same_number_of_relations(engine):
+    cfg_1_2 = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance2}]'])
+    cfg_1_3 = init_hydra_cfg('Config', ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1},{_target_:cs.SubConfigManyToManyInheritance3}]'])
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg_1_2 = orm.instantiate_and_insert_config(session, cfg_1_2)
+        cfg_1_3 = orm.instantiate_and_insert_config(session, cfg_1_3)
+        session.commit()
+
+        assert cfg_1_2.sub_config_one_to_many != cfg_1_3.sub_config_one_to_many
+
+
 @pytest.mark.parametrize('overrides', [
     ['sub_config_one_to_many.many_to_many_superclass=[]'],
     ['sub_config_one_to_many.many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],

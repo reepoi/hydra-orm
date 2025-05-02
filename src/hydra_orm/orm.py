@@ -251,9 +251,16 @@ def instantiate_and_insert_config(session, cfg):
                         .distinct()
                     ).subquery('has_subset_of_relations')
                 )
+                has_one_not_in_relation = (
+                    sa.select(has_subset_of_relations.id)
+                    .join(getattr(table_alias_candidates, k))
+                    .where(table_related.id.notin_([vv.id for vv in v]))
+                    .distinct()
+                )
                 subquery = (
                     sa.select(has_subset_of_relations.id)
                     .join(getattr(has_subset_of_relations, k))
+                    .where(has_subset_of_relations.id.notin_(has_one_not_in_relation))
                     .group_by(has_subset_of_relations.id)
                     .having(sa.func.count(table_related.id) == len(v))
                 )

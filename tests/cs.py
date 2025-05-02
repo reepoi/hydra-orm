@@ -29,6 +29,10 @@ class SubConfigManyToManyInheritance2(SubConfigManyToManySuperclass):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
+class SubConfigManyToManyInheritance3(SubConfigManyToManySuperclass):
+    value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
+
+
 class SubConfigOneToMany(orm.Table):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
     many_to_many = orm.ManyToManyField(SubConfigManyToMany, default_factory=list)
