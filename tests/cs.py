@@ -51,6 +51,10 @@ class SubConfigOneToManyInheritance2(SubConfigOneToManySuperclass):
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
+class SubConfigOneToManyReferencingSuperclassOneToMany(SubConfigOneToManySuperclass):
+    superclass = orm.OneToManyField(SubConfigOneToManySuperclass, default_factory=SubConfigOneToManySuperclass)
+
+
 class Config(orm.Table):
     defaults: typing.List[typing.Any] = hydra_orm.utils.make_defaults_list([
         dict(sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1.__name__),
@@ -92,6 +96,7 @@ orm.store_config(Config, name='base_Config')  # specify name so that conf_yaml/C
 orm.store_config(SubConfigOneToManySuperclass, group=Config.sub_config_one_to_many_superclass.key)
 orm.store_config(SubConfigOneToManyInheritance1, group=Config.sub_config_one_to_many_superclass.key)
 orm.store_config(SubConfigOneToManyInheritance2, group=Config.sub_config_one_to_many_superclass.key)
+orm.store_config(SubConfigOneToManyReferencingSuperclassOneToMany, group=Config.sub_config_one_to_many_superclass.key)
 
 
 if __name__ == "__main__":

@@ -157,6 +157,7 @@ class InheritableTableMetaclass(TableMetaclass):
                     'omegaconf_ignore': True,
                 })
             )
+            attrs['__mapper_args__']['inherit_condition'] = attrs['id'].metadata[SQLALCHEMY_DATACLASS_METADATA_KEY] == bases[0].id
         return super().__new__(cls, clsname, bases, attrs)
 
 

@@ -19,6 +19,7 @@ from hydra_orm import orm
     ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance2'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyReferencingSuperclassOneToMany'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass}]'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1}]'],
     ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance2}]'],
