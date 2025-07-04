@@ -254,7 +254,7 @@ def instantiate_and_insert_config(session, cfg):
                 )
                 has_one_not_in_relation = (
                     sa.select(has_subset_of_relations.id)
-                    .join(getattr(table_alias_candidates, k))
+                    .join(getattr(has_subset_of_relations, k))
                     .where(table_related.id.notin_([vv.id for vv in v]))
                     .distinct()
                 )
