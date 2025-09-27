@@ -194,6 +194,27 @@ def store_config(node, group=None, name=None):
     cs.store(group=group, name=name, node=node)
 
 
+class HydraORMDatabaseHasDuplicateRowsError(Exception):
+    def __init__(self, table_name, query_iterable, limit=10):
+        super().__init__('')
+        self.table_name = table_name
+        self.limit = limit
+        self.ids = [r[1] for r in zip(range(limit + 1), query_iterable)]
+        self.over_limit = len(self.ids) > limit
+        self.ids = self.ids[:limit]
+
+    def __str__(self):
+        res = (
+            f"Database has duplicate rows in table '{self.table_name}'."
+        )
+        id_str = ', '.join(map(str, self.ids))
+        if self.over_limit:
+            res += f" The duplicate rows have these ids (showing first {self.limit} ids): {id_str}."
+        else:
+            res += f" The duplicate rows have these ids: {id_str}."
+        return res
+
+
 def instantiate_and_insert_config(session, cfg):
     if not isinstance(cfg, (omegaconf.DictConfig, dict)):
         raise ValueError(f'Tried to instantiate: {cfg=}')
@@ -269,11 +290,14 @@ def instantiate_and_insert_config(session, cfg):
                 subqueries.append(subquery)
         query = sa.intersect(*subqueries)
         candidates_query = sa.select(table_alias_candidates).where(table_alias_candidates.id.in_(query))
-        candidates = session.execute(candidates_query)
-        candidates = list(zip(range(2), candidates))
-        assert len(candidates) <= 1
+        candidates = session.execute(candidates_query.limit(2)).all()
+        if len(candidates) > 1:
+            raise HydraORMDatabaseHasDuplicateRowsError(
+                table.__name__,
+                session.execute(sa.select(table_alias_candidates.id).where(table_alias_candidates.id.in_(query)))
+            )
         if len(candidates) == 1:
-            row = candidates[0][1][0]
+            row = candidates[0][0]
             for k, v in nonpersisted_fields.items():
                 setattr(row, k, v)
             return row
@@ -281,13 +305,17 @@ def instantiate_and_insert_config(session, cfg):
     # with session.no_autoflush:
     if len(m2m) == 0:
         if hasattr(table, '__mapper_args__') and 'polymorphic_identity' in table.__mapper_args__:
-            saved_rows = session.execute(sa.select(table).filter_by(**record, sa_inheritance=table.__mapper_args__['polymorphic_identity']))
+            saved_row_filters = {**record, 'sa_inheritance': table.__mapper_args__['polymorphic_identity']}
         else:
-            saved_rows = session.execute(sa.select(table).filter_by(**record))
-        saved_rows = list(zip(range(2), saved_rows))
-        assert len(saved_rows) <= 1
+            saved_row_filters = record
+        saved_rows = session.execute(sa.select(table).filter_by(**saved_row_filters).limit(2)).all()
+        if len(saved_rows) > 1:
+            raise HydraORMDatabaseHasDuplicateRowsError(
+                table.__name__,
+                session.execute(sa.select(table.id).filter_by(**saved_row_filters))
+            )
         if len(saved_rows) == 1:
-            row = saved_rows[0][1][0]
+            row = saved_rows[0][0]
         else:
             row = table(**record)
             session.add(row)
