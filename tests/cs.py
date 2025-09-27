@@ -1,3 +1,4 @@
+from dataclasses import field
 import enum
 import typing
 
@@ -14,14 +15,17 @@ class StringEnum(str, enum.Enum):
 
 
 class SubConfigManyToMany(orm.Table):
+    not_saved_in_database: str = field(default='override_me')
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
 class SubConfigManyToManySuperclass(orm.InheritableTable):
+    not_saved_in_database: str = field(default='override_me')
     value_superclass: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
 class SubConfigManyToManyInheritance1(SubConfigManyToManySuperclass):
+    not_saved_in_database: str = field(default='override_me')
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
@@ -40,10 +44,12 @@ class SubConfigOneToMany(orm.Table):
 
 
 class SubConfigOneToManySuperclass(orm.InheritableTable):
+    not_saved_in_database: str = field(default='override_me')
     value_superclass: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
 class SubConfigOneToManyInheritance1(SubConfigOneToManySuperclass):
+    not_saved_in_database: str = field(default='override_me')
     value: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=1)
 
 
@@ -52,6 +58,7 @@ class SubConfigOneToManyInheritance2(SubConfigOneToManySuperclass):
 
 
 class SubConfigOneToManyReferencingSuperclassOneToMany(SubConfigOneToManySuperclass):
+    not_saved_in_database: str = field(default='override_me')
     superclass = orm.OneToManyField(SubConfigOneToManySuperclass, default_factory=SubConfigOneToManySuperclass)
 
 
@@ -60,6 +67,7 @@ class Config(orm.Table):
         dict(sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1.__name__),
         '_self_',
     ])
+    not_saved_in_database: str = field(default='override_me')
     alt_id: str = orm.make_field(orm.ColumnRequired(sa.String(8), index=True, unique=True), init=False, omegaconf_ignore=True)
     rng_seed: int = orm.make_field(orm.ColumnRequired(sa.Integer), default=42)
     string: StringEnum = orm.make_field(orm.ColumnRequired(sa.Enum(StringEnum)), default=StringEnum.STRING1)

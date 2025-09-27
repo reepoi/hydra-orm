@@ -37,6 +37,30 @@ def test_insert_then_fetch_all_defaults(engine, overrides):
 
 
 @pytest.mark.parametrize('overrides', [
+    ['not_saved_in_database=overridden'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass', 'sub_config_one_to_many_superclass.not_saved_in_database=overridden'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1', 'sub_config_one_to_many_superclass.not_saved_in_database=overridden'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyReferencingSuperclassOneToMany', 'sub_config_one_to_many_superclass.not_saved_in_database=overridden'],
+    ['sub_config_one_to_many_superclass=SubConfigOneToManyReferencingSuperclassOneToMany', 'sub_config_one_to_many_superclass.superclass.not_saved_in_database=overridden'],
+    ['sub_config_many_to_many=[{value:1,not_saved_in_database:overridden}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManySuperclass,not_saved_in_database:overridden}]'],
+    ['sub_config_many_to_many_superclass=[{_target_:cs.SubConfigManyToManyInheritance1,not_saved_in_database:overridden}]'],
+])
+def test_override_value_of_field_not_saved_in_database_is_preserved(engine, overrides):
+    cfg = init_hydra_cfg('Config', overrides)
+    with sa_orm.Session(engine, expire_on_commit=False) as session:
+        cfg = orm.instantiate_and_insert_config(session, cfg)
+        session.commit()
+
+        v = cfg
+        for s in overrides[-1].split('=')[0].split('.'):
+            v = getattr(v, s)
+            if isinstance(v, list):
+                v = v[0].not_saved_in_database
+        assert v == 'overridden'
+
+
+@pytest.mark.parametrize('overrides', [
     ['sub_config_one_to_many_superclass=SubConfigOneToManySuperclass'],
     ['sub_config_one_to_many_superclass=SubConfigOneToManyInheritance1'],
 ])

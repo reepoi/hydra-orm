@@ -198,6 +198,7 @@ def instantiate_and_insert_config(session, cfg):
     if not isinstance(cfg, (omegaconf.DictConfig, dict)):
         raise ValueError(f'Tried to instantiate: {cfg=}')
     record = {}
+    nonpersisted_fields = {}
     m2m = {}
     instance = hydra.utils.instantiate(cfg, _recursive_=False)
     table = instance.__class__
@@ -220,11 +221,14 @@ def instantiate_and_insert_config(session, cfg):
                     instantiate_and_insert_config(session, vv) for vv in v
                 ]
             m2m[k] = rows
-        elif k != '_target_' and table_fields[k].init and SQLALCHEMY_DATACLASS_METADATA_KEY in table_fields[k].metadata:
-            if hasattr(table, f'transform_{k}') and callable(getattr(table, f'transform_{k}')):
-                transform = getattr(table, f'transform_{k}')
-                v = transform(session, v)
-            record[k] = v
+        elif k != '_target_' and table_fields[k].init:
+            if SQLALCHEMY_DATACLASS_METADATA_KEY in table_fields[k].metadata:
+                if hasattr(table, f'transform_{k}') and callable(getattr(table, f'transform_{k}')):
+                    transform = getattr(table, f'transform_{k}')
+                    v = transform(session, v)
+                record[k] = v
+            elif not k.endswith('_id'):
+                nonpersisted_fields[k] = v
 
     if len(m2m) > 0:
         if table.__bases__[0] is InheritableTable:
@@ -284,6 +288,8 @@ def instantiate_and_insert_config(session, cfg):
         assert len(candidates) <= 1
         if len(candidates) == 1:
             row = candidates[0][1][0]
+            for k, v in nonpersisted_fields.items():
+                setattr(row, k, v)
             return row
 
     # with session.no_autoflush:
@@ -307,4 +313,6 @@ def instantiate_and_insert_config(session, cfg):
         session.add(row)
         session.flush()
 
+    for k, v in nonpersisted_fields.items():
+        setattr(row, k, v)
     return row
