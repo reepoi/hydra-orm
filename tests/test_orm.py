@@ -27,7 +27,7 @@ from hydra_orm import orm
 ])
 def test_insert_then_fetch_all_defaults(engine, overrides):
     cfg = init_hydra_cfg('Config', overrides)
-    with sa_orm.Session(engine, expire_on_commit=False) as session:
+    with sa_orm.Session(engine) as session:
         cfg = orm.instantiate_and_insert_config(session, cfg)
         session.commit()
         cfg_fetched = session.execute(sa.select(cs.Config).where(cs.Config.id == cfg.id)).first()
@@ -48,7 +48,7 @@ def test_insert_then_fetch_all_defaults(engine, overrides):
 ])
 def test_override_value_of_field_not_saved_in_database_is_preserved(engine, overrides):
     cfg = init_hydra_cfg('Config', overrides)
-    with sa_orm.Session(engine, expire_on_commit=False) as session:
+    with sa_orm.Session(engine) as session:
         cfg = orm.instantiate_and_insert_config(session, cfg)
         session.commit()
 

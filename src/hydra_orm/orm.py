@@ -329,4 +329,10 @@ def instantiate_and_insert_config(session, cfg):
 
     for k, v in nonpersisted_fields.items():
         setattr(row, k, v)
+    # create strong references for all the rows to prevent the objects with
+    # overridden non-persistent values from being garbage collected.
+    # Just setting session.expire_on_commit=False works to prevserve the overrides
+    # in the pytests in this project, but it does not work for this project:
+    # https://github.com/Utah-Math-Data-Science/Latent-Dynamics-Data-Assimilation
+    session.info[(table.__name__, row.id)] = row
     return row
